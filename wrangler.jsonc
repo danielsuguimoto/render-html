@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "render-html",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat_v2", "global_fetch_strictly_public"],
+  "workers_dev": true,
+  "browser": {
+    "binding": "BROWSER",
+    "remote": true
+  },
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "render-html-files"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "dc99724b5960418eadec2039e5e2cb2d"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+ADMIN_PASSWORD="change-me"
+COOKIE_ENCRYPTION_KEY="run: openssl rand -hex 32"
