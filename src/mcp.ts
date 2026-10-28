@@ -21,8 +21,16 @@ export function toBase64(data: Uint8Array): string {
 	return btoa(binary);
 }
 
+// Inline media doubles the render's memory footprint (raw bytes + ~1.33x base64).
+// Cap it so a large render can't exhaust the Worker's 128 MB limit.
+const MAX_INLINE_BYTES = 8 * 1024 * 1024;
+
 export function toolResult(origin: string, result: RenderResult) {
 	const url = `${origin}/files/${result.key}`;
+	const text = `${url} (${result.bytes} bytes, expires in 30 days)`;
+	if (result.bytes > MAX_INLINE_BYTES) {
+		return { content: [{ type: "text" as const, text: `${text} — too large to return inline` }] };
+	}
 	const base64 = toBase64(result.data);
 	const media =
 		result.contentType === "application/pdf"
@@ -36,7 +44,7 @@ export function toolResult(origin: string, result: RenderResult) {
 			media,
 			{
 				type: "text" as const,
-				text: `${url} (${result.bytes} bytes, expires in 30 days)`,
+				text,
 			},
 		],
 	};

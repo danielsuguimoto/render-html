@@ -62,4 +62,16 @@ assert.equal(pdf.content[0].resource.uri, `${origin}/files/renders/def.pdf`);
 assert.deepEqual(new Uint8Array(Buffer.from(pdf.content[0].resource.blob, "base64")), pdfData);
 specTypeSchemas.CallToolResult.parse(pdf);
 
+// over the inline cap: URL-only text block, no media block
+const big = toolResult(origin, {
+	key: "renders/huge.png",
+	contentType: "image/png",
+	bytes: 9 * 1024 * 1024,
+	data: new Uint8Array(0),
+}) as { content: [{ type: string; text: string }] };
+assert.equal(big.content.length, 1);
+assert.equal(big.content[0].type, "text");
+assert.match(big.content[0].text, /too large to return inline$/);
+specTypeSchemas.CallToolResult.parse(big);
+
 console.log("all assertions passed");
