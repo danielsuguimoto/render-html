@@ -12,12 +12,31 @@ const VIEWPORT = {
 	height: z.number().int().min(16).max(4000).default(800).describe("Capture viewport height in CSS pixels."),
 };
 
-function toolResult(origin: string, result: RenderResult) {
+export function toBase64(data: Uint8Array): string {
+	let binary = "";
+	const chunk = 0x8000;
+	for (let i = 0; i < data.length; i += chunk) {
+		binary += String.fromCharCode(...data.subarray(i, i + chunk));
+	}
+	return btoa(binary);
+}
+
+export function toolResult(origin: string, result: RenderResult) {
+	const url = `${origin}/files/${result.key}`;
+	const base64 = toBase64(result.data);
+	const media =
+		result.contentType === "application/pdf"
+			? {
+					type: "resource" as const,
+					resource: { uri: url, mimeType: result.contentType, blob: base64 },
+				}
+			: { type: "image" as const, data: base64, mimeType: result.contentType };
 	return {
 		content: [
+			media,
 			{
 				type: "text" as const,
-				text: `${origin}/files/${result.key} (${result.bytes} bytes, expires in 30 days)`,
+				text: `${url} (${result.bytes} bytes, expires in 30 days)`,
 			},
 		],
 	};
@@ -37,7 +56,7 @@ function buildServer(env: Env, origin: string): McpServer {
 		"render_image",
 		{
 			description:
-				"Render HTML markup or a public URL to an image (PNG, JPEG, or WebP) using a headless browser. Returns a URL to the generated file, kept for 30 days.",
+				"Render HTML markup or a public URL to an image (PNG, JPEG, or WebP) using a headless browser. Returns the image inline as base64 image content plus a URL to the generated file, kept for 30 days.",
 			inputSchema: z.object({
 				...SOURCE,
 				...VIEWPORT,
@@ -62,7 +81,7 @@ function buildServer(env: Env, origin: string): McpServer {
 		"render_pdf",
 		{
 			description:
-				"Render HTML markup or a public URL to a PDF using a headless browser. Returns a URL to the generated file, kept for 30 days.",
+				"Render HTML markup or a public URL to a PDF using a headless browser. Returns the PDF inline as base64 resource content plus a URL to the generated file, kept for 30 days.",
 			inputSchema: z.object({
 				...SOURCE,
 				...VIEWPORT,

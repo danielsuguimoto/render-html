@@ -18,6 +18,7 @@ export interface RenderResult {
 	key: string;
 	contentType: string;
 	bytes: number;
+	data: Uint8Array;
 }
 
 export class RenderInputError extends Error {}
@@ -158,7 +159,7 @@ export async function renderToBucket(env: Env, input: RenderInput): Promise<Rend
 
 		const key = `renders/${crypto.randomUUID()}.${ext}`;
 		await env.FILES.put(key, data, { httpMetadata: { contentType } });
-		return { key, contentType, bytes: data.byteLength };
+		return { key, contentType, bytes: data.byteLength, data };
 	} finally {
 		await browser.close();
 	}
