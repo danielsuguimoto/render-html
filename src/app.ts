@@ -5,6 +5,7 @@ import {
 	type ConsentDescription,
 } from "@cloudflare/workers-oauth-provider";
 import type { Env } from "./env.js";
+import { clientMetadataUnavailable } from "./oauth.js";
 import { appPage, consentPage, loginPage } from "./pages.js";
 import { RenderInputError, renderToBucket, validateRenderInput } from "./render.js";
 import {
@@ -188,10 +189,8 @@ async function authorize(request: Request, env: Env): Promise<Response> {
 		if (error instanceof AuthorizationError && error.redirectTo) {
 			return Response.redirect(error.redirectTo, 302);
 		}
-		if (error instanceof AuthorizationError || error instanceof CimdFetchError) {
-			const message = error instanceof AuthorizationError ? error.description : "This app could not be verified.";
-			return new Response(message, { status: 400 });
-		}
+		if (error instanceof CimdFetchError) return clientMetadataUnavailable();
+		if (error instanceof AuthorizationError) return new Response(error.description, { status: 400 });
 		throw error;
 	}
 }

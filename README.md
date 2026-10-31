@@ -40,6 +40,28 @@ npx wrangler deploy
 
 Connect an MCP client to `https://<worker>.workers.dev/mcp` — the OAuth flow opens the password approval page.
 
+## OAuth lifetime and failure handling
+
+- Access tokens last one hour. Refresh tokens expire after **30 days of inactivity**; each successful refresh starts a new 30-day window. Existing unexpired grants adopt this policy on their next successful refresh. Rotation, lost-response retry handling and revocation remain enforced by `@cloudflare/workers-oauth-provider`.
+- Dynamic client registrations retain the provider's 90-day TTL and automatic renewal on successful token requests after half that lifetime. Public clients must register with `token_endpoint_auth_method: "none"` and use PKCE. Registrations omitting the method remain confidential (`client_secret_basic`, with the provider's legacy Basic/post compatibility); clients must retain their issued secret. Explicitly registered authentication methods are enforced.
+- URL-based client IDs use Client ID Metadata Documents (CIMD), fetched and validated by the provider with its bounded cache and SSRF protection. In provider 1.2.3, a failed lookup (including an upstream outage) becomes `401 invalid_client` **before** the refresh token is checked. That incorrectly looks like permanently invalid credentials to MCP clients. The Worker instead returns `503 temporarily_unavailable`, `Retry-After: 30` and `Cache-Control: no-store`, without consuming or rotating the token. Clients should retry with the same credentials, not delete them or re-register.
+- The provider does not expose a typed distinction between network failures and invalid CIMD documents. All metadata-resolution failures therefore fail closed as unavailable, including malformed/removed documents: no token is issued, and metadata must become valid before retry can succeed. The Worker does not trust stale metadata or weaken client authentication. Failed CIMD resolution during authorization also returns 503.
+- Missing registrations, wrong/missing secrets and method mismatches still return `invalid_client`. Structured `oauth_error` logs record `category` and `reason`, never request bodies, tokens, secrets or full client metadata. Look for `metadata_resolution_failed`, `client_not_found`, `client_secret_mismatch` or `token_endpoint_auth_method_mismatch` to distinguish causes. An expired/revoked grant returns `invalid_grant`; already-expired/deleted records cannot be recovered safely and require one new authorization (and registration if missing). The admin session cookie is separate from refresh authentication.
+
+These failure paths are reproduced in automated tests; confirming which one caused a particular production incident requires the corresponding Worker log. The error string `Token refresh failed: invalid_client` alone does not identify whether the client's registration, secret or metadata lookup failed.
+
+## Validation
+
+```sh
+npm ci
+npm run types
+npm run check
+npm test
+npx wrangler deploy --dry-run
+```
+
+`npm test` runs the MCP-result tests and OAuth HTTP integration tests in local **workerd**, using the production Worker handlers and real OAuth provider. OAuth tests use an expiration-aware in-memory KV, a controllable clock and mocked CIMD responses; they never call production, Browser Rendering or R2. They cover password consent, PKCE, confidential/public clients, outages and recovery with the same refresh token, rotation/replay, rolling expiration beyond 90 days, idle expiration and revocation. `npm run check` type-checks both source and tests.
+
 ## Local dev
 
 ```sh

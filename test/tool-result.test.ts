@@ -41,7 +41,7 @@ assert.deepEqual(
 	"image block data decodes to the rendered bytes",
 );
 assert.match(image.content[1].text, new RegExp(`^${origin}/files/renders/abc\\.png`));
-specTypeSchemas.CallToolResult.parse(image);
+assert.equal(specTypeSchemas.CallToolResult["~standard"].validate(image).issues, undefined);
 
 // render_pdf: embedded resource block carries the PDF bytes
 const pdfData = new Uint8Array([0x25, 0x50, 0x44, 0x46, 1, 2, 3]); // %PDF...
@@ -60,7 +60,7 @@ assert.equal(pdf.content[0].type, "resource");
 assert.equal(pdf.content[0].resource.mimeType, "application/pdf");
 assert.equal(pdf.content[0].resource.uri, `${origin}/files/renders/def.pdf`);
 assert.deepEqual(new Uint8Array(Buffer.from(pdf.content[0].resource.blob, "base64")), pdfData);
-specTypeSchemas.CallToolResult.parse(pdf);
+assert.equal(specTypeSchemas.CallToolResult["~standard"].validate(pdf).issues, undefined);
 
 // over the inline cap: URL-only text block, no media block
 const big = toolResult(origin, {
@@ -72,6 +72,6 @@ const big = toolResult(origin, {
 assert.equal(big.content.length, 1);
 assert.equal(big.content[0].type, "text");
 assert.match(big.content[0].text, /too large to return inline$/);
-specTypeSchemas.CallToolResult.parse(big);
+assert.equal(specTypeSchemas.CallToolResult["~standard"].validate(big).issues, undefined);
 
 console.log("all assertions passed");
