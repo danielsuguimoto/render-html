@@ -7,7 +7,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "check": "tsc --noEmit",
-    "test": "tsx test/tool-result.test.ts",
+    "test": "tsx test/tool-result.test.ts && tsx test/oauth.test.ts",
     "types": "wrangler types"
   },
   "dependencies": {
