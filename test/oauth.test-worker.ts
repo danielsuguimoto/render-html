@@ -171,6 +171,18 @@ export default {
 			assert.equal(response.status, 200, "the same refresh token works after metadata recovers");
 			passed.push("CIMD failures fail closed without mutating grants; retry succeeds after recovery");
 
+			const bogusBasic = `Basic ${btoa(`${encodeURIComponent(CLIENT_ID)}:bogus-secret`)}`;
+			const cimdCode = await codeFor(env, CLIENT_ID);
+			response = await worker.fetch(tokenRequest(codeBody(CLIENT_ID, cimdCode), bogusBasic), env, ctx);
+			assert.equal(response.status, 200, "CIMD client with stray Basic secret completes the code exchange");
+			let cimdRefresh = (await response.json() as { refresh_token: string }).refresh_token;
+			response = await worker.fetch(tokenRequest(refreshBody(CLIENT_ID, cimdRefresh), bogusBasic), env, ctx);
+			assert.equal(response.status, 200, "CIMD refresh tolerates a stray Basic secret");
+			cimdRefresh = (await response.json() as { refresh_token: string }).refresh_token;
+			response = await worker.fetch(tokenRequest({ ...refreshBody(CLIENT_ID, cimdRefresh), client_secret: "bogus" }), env, ctx);
+			assert.equal(response.status, 200, "CIMD refresh tolerates a stray body secret");
+			passed.push("shared-secret credentials on CIMD clients are ignored, not rejected");
+
 			const start = now;
 			for (const migrate of [false, true]) {
 				now = start;
