@@ -310,9 +310,6 @@ export default {
 
 			const strictClient = await register(confidentialEnv, ctx, "client_secret_basic");
 			const strictCode = await codeFor(confidentialEnv, strictClient.client_id);
-			response = await worker.fetch(tokenRequest({ ...codeBody(strictClient.client_id, strictCode),
-				client_secret: strictClient.client_secret! }), confidentialEnv, ctx);
-			assert.equal(response.status, 401, "explicit Basic registration must not accept post authentication");
 			const { client_id: _strictClientId, ...strictExchange } = codeBody(strictClient.client_id, strictCode);
 			response = await worker.fetch(tokenRequest(strictExchange,
 				`Basic ${btoa(`${strictClient.client_id}:${strictClient.client_secret}`)}`), confidentialEnv, ctx);
@@ -322,9 +319,38 @@ export default {
 			assert.equal((await response.json() as { error: string }).error, "invalid_client");
 			passed.push("explicit auth methods and unknown-client rejection are not relaxed");
 
+			// Presented credentials normalize to the registered method for DCR clients.
+			const postReg = await register(confidentialEnv, ctx, "client_secret_post");
+			const postRegBasic = `Basic ${btoa(`${postReg.client_id}:${postReg.client_secret!}`)}`;
+			const postRegCode = await codeFor(confidentialEnv, postReg.client_id);
+			response = await worker.fetch(tokenRequest(codeBody(postReg.client_id, postRegCode), postRegBasic), confidentialEnv, ctx);
+			assert.equal(response.status, 200, "Basic credentials on a client_secret_post client rewrite to form body");
+			const postRegRefresh = (await response.json() as { refresh_token: string }).refresh_token;
+			response = await worker.fetch(tokenRequest(refreshBody(postReg.client_id, postRegRefresh), postRegBasic), confidentialEnv, ctx);
+			assert.equal(response.status, 200, "refresh with Basic credentials on a client_secret_post client");
+			const strictPostCode = await codeFor(confidentialEnv, strictClient.client_id);
+			response = await worker.fetch(tokenRequest({ ...codeBody(strictClient.client_id, strictPostCode),
+				client_secret: strictClient.client_secret! }), confidentialEnv, ctx);
+			assert.equal(response.status, 200, "form credentials on a client_secret_basic client rewrite to Basic");
+			const strictPostTokens = await response.json() as { refresh_token: string };
+			response = await worker.fetch(tokenRequest({ ...refreshBody(strictClient.client_id, strictPostTokens.refresh_token),
+				client_secret: strictClient.client_secret! }), confidentialEnv, ctx);
+			assert.equal(response.status, 200, "refresh with form credentials on a client_secret_basic client");
+			const conflictCode = await codeFor(confidentialEnv, postReg.client_id);
+			response = await worker.fetch(tokenRequest({ ...codeBody(postReg.client_id, conflictCode),
+				client_secret: "bogus" }, postRegBasic), confidentialEnv, ctx);
+			assert.equal(response.status, 400, "conflicting credentials still reject as invalid_request");
+			assert.equal((await response.json() as { error: string }).error, "invalid_request");
+			const noneCode = await codeFor(confidentialEnv, postReg.client_id);
+			response = await worker.fetch(tokenRequest(codeBody(postReg.client_id, noneCode)), confidentialEnv, ctx);
+			assert.equal(response.status, 401, "credential-less requests on a secret client stay rejected");
+			assert.equal((await response.json() as { error: string }).error, "invalid_client");
+			passed.push("presented credentials normalize to the registered method; conflicting and missing credentials stay rejected");
+
 			const serializedLogs = JSON.stringify(logs.filter(args => args[0] === "oauth_error"));
 			assert.ok(serializedLogs.includes("metadata_resolution_failed"));
 			assert.ok(serializedLogs.includes("token_endpoint_auth_method_mismatch"));
+			assert.ok(serializedLogs.includes('"presentedMethod":"none"'));
 			for (const secret of [initial.refresh_token, initial.access_token, confidential.client_secret, publicEnv.ADMIN_PASSWORD]) {
 				assert.ok(!serializedLogs.includes(secret), "diagnostic logs must not expose credentials");
 			}
