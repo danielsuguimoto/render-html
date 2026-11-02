@@ -2,7 +2,12 @@ import { OAuthProvider, type OAuthProviderOptions } from "@cloudflare/workers-oa
 import { app } from "./app.js";
 import type { Env } from "./env.js";
 import { mcpApiHandler } from "./mcp.js";
-import { onOAuthError, REFRESH_TOKEN_TTL_SECONDS, stripSharedSecretFromCimdClient } from "./oauth.js";
+import {
+	normalizeClientAuthToRegisteredMethod,
+	onOAuthError,
+	REFRESH_TOKEN_TTL_SECONDS,
+	stripSharedSecretFromCimdClient,
+} from "./oauth.js";
 
 export function oauthOptions(origin: string): OAuthProviderOptions<Env> {
 	return {
@@ -30,7 +35,8 @@ export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const origin = new URL(request.url).origin;
 		const options = oauthOptions(origin);
-		const normalized = await stripSharedSecretFromCimdClient(request, options.tokenEndpoint);
+		const stripped = await stripSharedSecretFromCimdClient(request, options.tokenEndpoint);
+		const normalized = await normalizeClientAuthToRegisteredMethod(stripped, options.tokenEndpoint, env.OAUTH_KV);
 		return new OAuthProvider<Env>(options).fetch(normalized, env, ctx);
 	},
 } satisfies ExportedHandler<Env>;
